@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="text-center">
+    <h1>Welcome, {{ user.username }}!</h1>
+    <p>Your email: {{ user.email }}</p>
+    <a href="/logout" class="btn btn-danger mt-3">Logout</a>
+</div>
+{% endblock %}
