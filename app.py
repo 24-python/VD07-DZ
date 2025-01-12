@@ -20,7 +20,8 @@ app.config['SESSION_COOKIE_SECURE'] = False  # Set True in production with HTTPS
 db = SQLAlchemy(app)
 
 # Initialize rate limiter
-limiter = Limiter(app, key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address)
+limiter.init_app(app)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -117,4 +118,5 @@ def edit_profile():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run()
+
