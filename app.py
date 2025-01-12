@@ -4,13 +4,23 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.secret_key = os.urandom(24)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['WTF_CSRF_ENABLED'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # Set True in production with HTTPS
 
+# Initialize database
 db = SQLAlchemy(app)
+
+# Initialize rate limiter
+limiter = Limiter(app, key_func=get_remote_address)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -19,31 +29,31 @@ class User(db.Model):
     password = db.Column(db.String(200), nullable=False)
 
 class RegistrationForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
-    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
-    submit = SubmitField('Register')
+    username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=3, max=80)])
+    email = StringField('Электронная почта', validators=[DataRequired(), Email()])
+    password = PasswordField('Пароль', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Подтвердите пароль', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Зарегистрироваться')
 
     def validate_username(self, username):
         if User.query.filter_by(username=username.data).first():
-            raise ValidationError('Username already exists. Please choose another one.')
+            raise ValidationError('Это имя пользователя уже занято. Пожалуйста, выберите другое.')
 
     def validate_email(self, email):
         if User.query.filter_by(email=email.data).first():
-            raise ValidationError('Email already exists. Please use a different email address.')
+            raise ValidationError('Этот адрес электронной почты уже используется. Пожалуйста, выберите другой.')
 
 class LoginForm(FlaskForm):
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Password', validators=[DataRequired()])
-    submit = SubmitField('Login')
+    email = StringField('Электронная почта', validators=[DataRequired(), Email()])
+    password = PasswordField('Пароль', validators=[DataRequired()])
+    submit = SubmitField('Войти')
 
 class EditProfileForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('New Password', validators=[Length(min=6, message='Password must be at least 6 characters long')])
-    confirm_password = PasswordField('Confirm New Password', validators=[EqualTo('password')])
-    submit = SubmitField('Save Changes')
+    username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=3, max=80)])
+    email = StringField('Электронная почта', validators=[DataRequired(), Email()])
+    password = PasswordField('Новый пароль', validators=[Length(min=6, message='Пароль должен содержать минимум 6 символов')])
+    confirm_password = PasswordField('Подтвердите новый пароль', validators=[EqualTo('password')])
+    submit = SubmitField('Сохранить изменения')
 
 @app.route('/')
 def home():
@@ -60,33 +70,34 @@ def register():
         new_user = User(username=form.username.data, email=form.email.data, password=hashed_password)
         db.session.add(new_user)
         db.session.commit()
-        flash('Registration successful! Please log in.', 'success')
+        flash('Регистрация прошла успешно! Пожалуйста, войдите.', 'success')
         return redirect(url_for('login'))
     return render_template('register.html', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")  # Ограничение: 5 попыток за минуту
 def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and check_password_hash(user.password, form.password.data):
             session['user_id'] = user.id
-            flash('Login successful!', 'success')
+            flash('Вы успешно вошли в систему!', 'success')
             return redirect(url_for('home'))
         else:
-            flash('Invalid email or password!', 'danger')
+            flash('Неверный адрес электронной почты или пароль!', 'danger')
     return render_template('login.html', form=form)
 
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
-    flash('You have been logged out.', 'info')
+    flash('Вы вышли из системы.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
 def edit_profile():
     if 'user_id' not in session:
-        flash('Please log in to edit your profile.', 'warning')
+        flash('Пожалуйста, войдите, чтобы изменить профиль.', 'warning')
         return redirect(url_for('login'))
 
     user = User.query.get(session['user_id'])
@@ -98,7 +109,7 @@ def edit_profile():
         if form.password.data:
             user.password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
         db.session.commit()
-        flash('Profile updated successfully!', 'success')
+        flash('Профиль успешно обновлен!', 'success')
         return redirect(url_for('home'))
 
     return render_template('edit_profile.html', form=form)

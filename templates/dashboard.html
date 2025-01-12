@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Главная{% endblock %}
 {% block content %}
-<h2>Welcome, {{ user.username }}!</h2>
-<p>Your email: {{ user.email }}</p>
-<a href="{{ url_for('edit_profile') }}" class="btn btn-secondary">Edit Profile</a>
+<h2>Добро пожаловать, {{ user.username }}!</h2>
+<p>Ваш email: {{ user.email }}</p>
+<a href="{{ url_for('edit_profile') }}" class="btn btn-secondary">Редактировать профиль</a>
 {% endblock %}
